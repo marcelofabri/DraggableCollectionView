@@ -17,5 +17,8 @@
 @optional
 
 - (BOOL)collectionView:(UICollectionView *)collectionView canMoveItemAtIndexPath:(NSIndexPath *)indexPath toIndexPath:(NSIndexPath *)toIndexPath;
+- (void (^)(UIView *cell))collectionView:(UICollectionView *)collectionView customActionForMovingIndexAtIndexPath:(NSIndexPath *)indexPath toPosition:(CGPoint)position completion:(void (^)())completion;
+
+- (void)collectionView:(UICollectionView *)collectionView didStartMovingItemAtIndexPath:(NSIndexPath *)fromIndexPath;
 
 @end

@@ -218,7 +218,8 @@ typedef NS_ENUM(NSInteger, _ScrollingDirection) {
         return;
     }
     
-    NSIndexPath *indexPath = [self indexPathForItemClosestToPoint:[sender locationInView:self.collectionView]];
+    CGPoint position = [sender locationInView:self.collectionView];
+    NSIndexPath *indexPath = [self indexPathForItemClosestToPoint:position];
     
     switch (sender.state) {
         case UIGestureRecognizerStateBegan: {
@@ -254,35 +255,59 @@ typedef NS_ENUM(NSInteger, _ScrollingDirection) {
         } break;
         case UIGestureRecognizerStateEnded:
         case UIGestureRecognizerStateCancelled: {
-            if(self.layoutHelper.fromIndexPath == nil) {
+            if (self.layoutHelper.fromIndexPath == nil) {
                 return;
             }
-            // Tell the data source to move the item
-            [(id<UICollectionViewDataSource_Draggable>)self.collectionView.dataSource collectionView:self.collectionView
-                                                                              moveItemAtIndexPath:self.layoutHelper.fromIndexPath
-                                                                                      toIndexPath:self.layoutHelper.toIndexPath];
+
+            id<UICollectionViewDataSource_Draggable> dataSource = (id<UICollectionViewDataSource_Draggable>)self.collectionView.dataSource;
             
-            // Move the item
-            [self.collectionView performBatchUpdates:^{
-                [self.collectionView moveItemAtIndexPath:self.layoutHelper.fromIndexPath toIndexPath:self.layoutHelper.toIndexPath];
-                self.layoutHelper.fromIndexPath = nil;
-                self.layoutHelper.toIndexPath = nil;
-            } completion:nil];
+            void (^customAction)(UIView *cell) = NULL;
             
-            // Switch mock for cell
-            UICollectionViewLayoutAttributes *layoutAttributes = [self.collectionView layoutAttributesForItemAtIndexPath:self.layoutHelper.hideIndexPath];
-            [UIView
-             animateWithDuration:0.3
-             animations:^{
-                 mockCell.center = layoutAttributes.center;
-                 mockCell.transform = CGAffineTransformMakeScale(1.f, 1.f);
-             }
-             completion:^(BOOL finished) {
-                 [mockCell removeFromSuperview];
-                 mockCell = nil;
-                 self.layoutHelper.hideIndexPath = nil;
-                 [self.collectionView.collectionViewLayout invalidateLayout];
-             }];
+            if ([dataSource respondsToSelector:@selector(collectionView:customActionForMovingIndexAtIndexPath:toPosition:completion:)]) {
+                void (^completion)() = ^{
+                    [mockCell removeFromSuperview];
+                    mockCell = nil;
+                    self.layoutHelper.fromIndexPath = nil;
+                    self.layoutHelper.toIndexPath = nil;
+                    self.layoutHelper.hideIndexPath = nil;
+                    [self.collectionView.collectionViewLayout invalidateLayout];
+                };
+                
+                customAction = [dataSource collectionView:self.collectionView customActionForMovingIndexAtIndexPath:self.layoutHelper.fromIndexPath toPosition:position completion:completion];
+            }
+            
+            if (! customAction) {
+                // Tell the data source to move the item
+                [dataSource collectionView:self.collectionView
+                       moveItemAtIndexPath:self.layoutHelper.fromIndexPath
+                               toIndexPath:self.layoutHelper.toIndexPath];
+            }
+            
+            if (customAction) {
+                customAction(mockCell);
+            } else {
+                // Move the item
+                [self.collectionView performBatchUpdates:^{
+                    [self.collectionView moveItemAtIndexPath:self.layoutHelper.fromIndexPath toIndexPath:self.layoutHelper.toIndexPath];
+                    self.layoutHelper.fromIndexPath = nil;
+                    self.layoutHelper.toIndexPath = nil;
+                } completion:nil];
+                
+                // Switch mock for cell
+                UICollectionViewLayoutAttributes *layoutAttributes = [self.collectionView layoutAttributesForItemAtIndexPath:self.layoutHelper.hideIndexPath];
+                [UIView
+                 animateWithDuration:0.3
+                 animations:^{
+                     mockCell.center = layoutAttributes.center;
+                     mockCell.transform = CGAffineTransformMakeScale(1.f, 1.f);
+                 }
+                 completion:^(BOOL finished) {
+                     [mockCell removeFromSuperview];
+                     mockCell = nil;
+                     self.layoutHelper.hideIndexPath = nil;
+                     [self.collectionView.collectionViewLayout invalidateLayout];
+                 }];
+            }
             
             // Reset
             [self invalidatesScrollTimer];
